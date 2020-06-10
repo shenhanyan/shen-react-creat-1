@@ -3,40 +3,81 @@ import React, { Component } from "react";
 import { Button, Table } from "antd";
 // 引入antd字体图标
 import { PlusOutlined, FormOutlined, DeleteOutlined } from "@ant-design/icons";
+import { connect } from "react-redux";
 
-import { reqGetSubjectList } from "@api/edu/subject";
+import { getSubjectList, getSubSubjectList } from "./redux";
 
 import "./index.less";
 
-export default class Subject extends Component {
+@connect(
+  (state) => ({ subjectList: state.subjectList }), // 状态数据
+  {
+    // 更新状态数据的方法
+    getSubjectList,
+    getSubSubjectList,
+  }
+)
+
+class Subject extends Component {
 
   state = {
-    subjects: {
-      total: 0,
-      items: [],
-    }
+    expandedRowKeys: [], // 展开项
   };
+
 
   componentDidMount() {
     // 代表一上来请求第一页数据
     this.getSubjectList(1, 10);
   }
 
-  // 获取subject分页列表数据
-  getSubjectList = async (page, limit) => {
+  /*
+    问题1：展开第一项 展开第二项 关闭第二项 第一项数据发生了更新
+      原因：
+        不管展开还是关闭都会触发  handleExpandRowsChange
+        [1, 2] --> [1] 就会拿着 1 重新发送请求，所以更新了第一项数据
 
-    // 发送请求
-    const result = await reqGetSubjectList(page, limit);
+      解决：
+          关键点：判断当期是 展开 还是 关闭~
+            如果是展开：就是发送请求更新数据，还要更新expandendRowKeys
+            如果是关闭，就只要更新expendedRowKeys,而不需要发送请求
+          展开：长度会+1，而关闭，长度会-1
+          当前expandendRowKeys --. this.state.expandadRowKeys
+          最新expandaadRowKeys --> 函数传入的参数
 
-    // 更新数据
+  */
+
+  // 点击展开一级菜单
+  // expandRowKeys 展开的行项 (如果有没有展开的会自动去掉)
+
+  handleExpandedRowsChange = (expandedRowKeys) => {
+    console.log("handleExpandedRowsChange", expandedRowKeys);
+    // 长度
+    const length = expandedRowKeys.length;
+
+    // 如果最新长度大于之前的长度，说明就是展开~
+    if (length > this.state.expandedRowKeys.length) {
+      // 点击要展开的最后一项值~
+      const lastKey = expandedRowKeys[length - 1];
+      // 发送请求，请求要展开菜单的二级菜单数据
+      this.props.getSubSubjectList(lastKey);
+    }
+
+    // 更新state --> 告诉Table那个子菜单需要展开
     this.setState({
-      subjects: result,
+      expandedRowKeys,
     });
   };
 
+  // 显示添加页面
+  showAddSubject = () => {
+    this.props.history.push("/edu/subject/add");
+  };
+
+  
+
 
   render() {
-
+    const { subjectList, getSubjectList } = this.props;
     const { subjects } = this.state;
 
     const columns = [
@@ -70,58 +111,30 @@ export default class Subject extends Component {
       },
     ];
 
-    // const data = [
-    //   {
-    //     key: 1,
-    //     name: "John Brown",
-    //     age: 32,
-    //     address: "New York No. 1 Lake Park",
-    //     description:
-    //       "My name is John Brown, I am 32 years old, living in New York No. 1 Lake Park.",
-    //   },
-    //   {
-    //     key: 2,
-    //     name: "Jim Green",
-    //     age: 42,
-    //     address: "London No. 1 Lake Park",
-    //     description:
-    //       "My name is Jim Green, I am 42 years old, living in London No. 1 Lake Park.",
-    //   },
-    //   {
-    //     key: 3,
-    //     name: "Not Expandable",
-    //     age: 29,
-    //     address: "Jiangsu No. 1 Lake Park",
-    //     description: "This not expandable",
-    //   },
-    //   {
-    //     key: 4,
-    //     name: "Joe Black",
-    //     age: 32,
-    //     address: "Sidney No. 1 Lake Park",
-    //     description:
-    //       "My name is Joe Black, I am 32 years old, living in Sidney No. 1 Lake Park.",
-    //   },
-    // ];
+   
 
     return (
       <div className="subject">
-        <Button type="primary" className="subject-btn">
+        <Button 
+            type="primary" 
+            className="subject-btn"
+            onClick={this.showAddSubject}
+            >
           <PlusOutlined />
           新建
         </Button>
         <Table
           columns={columns} // 决定列头
           expandable={{
-            // 决定列是否可以展开
-            // 决定行展开时显示什么内容
-            expandedRowRender: (record) => (
-              <p style={{ margin: 0 }}>{record.description}</p>
-            ),
-            // 决定行是否可以展开
-            // 返回值true 就是可以展开
-            // 返回值false 就是不可以展开
-            rowExpandable: (record) => record.name !== "Not Expandable",
+            // 内部默认会使用children作为展开的子菜单
+            // 也就是说，如果要展开的数据有children属性，才会有展开图标，就会作为子菜单展开~
+            // 负责展开行
+            // 展开哪些行？[行的key值, 行的key值...]
+            // [_id, _id]
+            expandedRowKeys,
+            // 展开行触发的方法。
+            // 将展开的行[1, 2, 3]作为参数传入
+            onExpandedRowsChange: this.handleExpandedRowsChange,
           }}
           dataSource={subjects.items} // 决定每一行显示的数据
           rowKey="_id" // 指定key属性的值是_id
@@ -132,9 +145,12 @@ export default class Subject extends Component {
             pageSizeOptions: ["5", "10", "15", "20"],
             defaultPageSize: 10,
             onChange: this.getSubjectList, // 页面发生变化触发的回调
+            onShowSizeChange: getSubjectList,
           }}
         />
       </div>
     );
   }
 }
+
+export default Subject;
